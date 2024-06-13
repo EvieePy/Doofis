@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 import discord
 import requests
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import core
 
@@ -98,7 +98,7 @@ class Portals(commands.Cog):
         }
 
     async def cog_load(self) -> None:
-        await asyncio.to_thread(self._fetch_portals)
+        self.dip_updater.start()
 
     def _parse_data(self, portal: str, /, *, data: str) -> None:
         match: re.Match[str] | None = PORTAL_RE.search("".join(data.splitlines()))
@@ -166,11 +166,35 @@ class Portals(commands.Cog):
     @commands.hybrid_command()
     async def portals(self, ctx: commands.Context[core.Bot]) -> None:
         """Fetch the last known positions of the dimension portals."""
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         await asyncio.to_thread(self._fetch_portals)
 
         embed: discord.Embed = self.generate_embed()
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @tasks.loop(minutes=30)
+    async def dip_updater(self) -> None:
+        await asyncio.to_thread(self._fetch_portals)
+
+        embed: discord.Embed = self.generate_embed()
+        channel: discord.TextChannel = self.bot.get_channel(1250936053603242167)  # type: ignore
+
+        if not channel:
+            logger.warning("Unable to find the Discord International Pub channel for auto-updates.")
+            return
+
+        history: list[discord.Message] = [m async for m in channel.history()]
+
+        try:
+            previous: discord.Message = history[0]
+        except IndexError:
+            await channel.send(embed=embed)
+        else:
+            await previous.edit(embed=embed)
+
+    @dip_updater.before_loop
+    async def dip_updater_before(self) -> None:
+        await self.bot.wait_until_ready()
 
 
 async def setup(bot: core.Bot) -> None:
