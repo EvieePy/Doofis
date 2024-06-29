@@ -18,12 +18,19 @@ from typing import TypedDict
 
 class Bot(TypedDict):
     token: str
+    debug: bool
 
 
 class Scraper(TypedDict):
     cf_clearance: str
 
 
+class Wavelink(TypedDict):
+    host: str
+    password: str
+
+
 class Config(TypedDict):
     BOT: Bot
     SCRAPER: Scraper
+    WAVELINK: Wavelink

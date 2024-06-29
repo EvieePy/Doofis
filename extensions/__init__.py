@@ -25,10 +25,15 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 async def setup(bot: core.Bot) -> None:
+    NO_LOAD: list[str] = [".portals"]
     extensions: list[str] = [f".{f.stem}" for f in pathlib.Path("extensions").glob("*[a-zA-Z].py")]
     loaded: list[str] = []
 
     for extension in extensions:
+        if bot.debug and extension in NO_LOAD:
+            logger.info("Skipped loading: '%s' as bot is currently in debug mode.", extension)
+            continue
+
         try:
             await bot.load_extension(extension, package="extensions")
         except Exception as e:

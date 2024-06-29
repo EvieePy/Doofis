@@ -3,3 +3,8 @@ cf_clearance = ""
 
 [BOT]
 token = ""
+debug = true
+
+[WAVELINK]
+host = ""
+password = ""
