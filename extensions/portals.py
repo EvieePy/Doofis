@@ -177,7 +177,7 @@ class Portals(commands.Cog):
         await asyncio.to_thread(self._fetch_portals)
 
         embed: discord.Embed = self.generate_embed()
-        channel: discord.TextChannel = self.bot.get_channel(1250936053603242167)  # type: ignore
+        channel: discord.TextChannel | None = self.bot.get_channel(1250936053603242167)  # type: ignore
 
         if not channel:
             logger.warning("Unable to find the Discord International Pub channel for auto-updates.")

@@ -21,6 +21,7 @@ import discord
 from discord.ext import commands
 
 from . import __version__
+from .config import CONFIG
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class Bot(commands.Bot):
     def __init__(self) -> None:
         ua: str = f"Doofis Bot/{__version__}, Python/{sys.version}, Discord.py/{discord.__version__}"
         self.session: aiohttp.ClientSession = aiohttp.ClientSession(headers={"User-Agent": ua})
+        self.debug: bool = CONFIG["BOT"]["debug"]
 
         intents: discord.Intents = discord.Intents.default()
         intents.members = True

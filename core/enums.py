@@ -13,10 +13,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-__version__: str = "0.0.1a"
+import enum
 
 
-from .bot import Bot as Bot
-from .config import CONFIG as CONFIG
-from .enums import *
-from .player import Player as Player
+__all__ = ("PlayerEmoji",)
+
+
+class PlayerEmoji(enum.Enum):
+    REPLAY = "<:replay:1256553358341312532>"
+    SHUFFLE = "<:shuffle:1256553359981150289>"
+    FORWARD = "<:forward:1256553367929622579>"
+    BACKWARD = "<:backward:1256553366167752704>"
+    STOP = "<:stop:1256553361445228646>"
+    PAUSE = "<:pause:1256553371075346432>"
+    PLAY = "<:play:1256553369447698542>"
+    VOL_DOWN = "<:vol_down:1256553486842335322>"
+    VOL_UP = "<:vol_up:1256553364364333057>"
+    OPTIONS = "<:options:1256553356575375412>"
