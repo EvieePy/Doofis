@@ -42,8 +42,7 @@ class Portals(commands.Cog):
     def __init__(self, bot: core.Bot) -> None:
         self.bot: core.Bot = bot
 
-        self._initial_fetch: bool = True
-        self._last_payload: dict[SERVER_T, PortalPayload] = {}
+        self._last_payload: dict[SERVER_T, dict[str, PortalPayload]] = {name: {} for name in core.SERVERS}
 
         self._server_iter: core.ServerIter = core.ServerIter()
         self._portals: list[str] = ["Xélorium", "Ecaflipus", "Enutrosor", "Srambad"]
@@ -98,11 +97,6 @@ class Portals(commands.Cog):
         }
 
     async def cog_load(self) -> None:
-        if self._initial_fetch:
-            for _ in range(len(self._server_iter)):
-                await asyncio.to_thread(self._fetch_portals, next(self._server_iter))
-                await asyncio.sleep(5)
-
         self.dip_updater.start()
 
     def _parse_data(self, server: SERVER_T, *, portal: str, data: str) -> None:
@@ -114,7 +108,7 @@ class Portals(commands.Cog):
         updated: int = int(match.group("updated"))
         unit: Units = self.unit_mapping.get(match.group("unit"), "unknown")
 
-        self._last_payload[server] = {"name": portal, "pos": pos, "updated": updated, "unit": unit}
+        self._last_payload[server][portal] = {"pos": pos, "updated": updated, "unit": unit}
 
     def _convert_time(self, *, unit: str, updated: int) -> str:
         if unit == "unknown":
@@ -135,7 +129,7 @@ class Portals(commands.Cog):
 
     def _fetch_portals(self, server: SERVER_T) -> None:
         for portal in self._portals:
-            data: bytes = f"portal={portal}&{server}".encode()
+            data: bytes = f"portal={portal}&server={server}".encode()
 
             resp = requests.post(URL, cookies=self.cookies, headers=self.headers, data=data)
             if resp.status_code != 200:
@@ -153,14 +147,16 @@ class Portals(commands.Cog):
             embed.description = "No portal data available!"
             return embed
 
-        data: PortalPayload = self._last_payload[server]
-        position: str = str(data.get("pos", "Unknown"))
-        unit: str = data.get("unit", "unknown")
-        updated: int = data.get("updated", 0)
-        name: str = data.get("name", "Unknown")
+        data: dict[str, PortalPayload] = self._last_payload[server]
 
-        stamp: str = self._convert_time(unit=unit, updated=updated)
-        embed.add_field(name=f"{name} Dimension", value=f"`{position}`\nUpdated: {stamp}", inline=False)
+        for key, value in data.items():
+            position: str = str(value.get("pos", "Unknown"))
+            unit: str = value.get("unit", "unknown")
+            updated: int = value.get("updated", 0)
+            name: str = key
+
+            stamp: str = self._convert_time(unit=unit, updated=updated)
+            embed.add_field(name=f"{name} Dimension", value=f"`{position}`\nUpdated: {stamp}", inline=False)
 
         return embed
 
@@ -197,10 +193,6 @@ class Portals(commands.Cog):
 
     @tasks.loop(minutes=10)
     async def dip_updater(self) -> None:
-        if self._initial_fetch:
-            self._initial_fetch = False
-            return
-
         server: SERVER_T = next(self._server_iter)
         await asyncio.to_thread(self._fetch_portals, server)
 
@@ -209,9 +201,6 @@ class Portals(commands.Cog):
     @dip_updater.before_loop
     async def dip_updater_before(self) -> None:
         await self.bot.wait_until_ready()
-
-        for _ in range(len(self._server_iter)):
-            await self._update_dip(next(self._server_iter))
 
 
 async def setup(bot: core.Bot) -> None:

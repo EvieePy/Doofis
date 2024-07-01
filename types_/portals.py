@@ -28,7 +28,6 @@ class UnitMapping(TypedDict):
 
 
 class PortalPayload(TypedDict, total=False):
-    name: str
     pos: list[int]
     updated: int
     unit: Units
