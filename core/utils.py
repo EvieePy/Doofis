@@ -13,11 +13,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-__version__: str = "0.0.1a"
+from types_.portals import SERVER_T
 
 
-from .bot import Bot as Bot
-from .config import CONFIG as CONFIG
-from .enums import *
-from .player import Player as Player
-from .utils import *
+__all__ = ("SERVERS", "ServerIter")
+
+
+SERVERS: list[SERVER_T] = ["Tal Kasha", "Draconiros", "Hell Mina"]
+
+
+class ServerIter:
+    def __init__(self) -> None:
+        self.data: list[SERVER_T] = SERVERS
+        self.index: int = -1
+        self.max: int = len(self.data)
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __next__(self) -> SERVER_T:
+        self.index += 1
+        if self.index + 1 > self.max:
+            self.index = 0
+
+        return self.data[self.index]

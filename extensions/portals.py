@@ -24,6 +24,7 @@ import requests
 from discord.ext import commands, tasks
 
 import core
+from types_.portals import SERVER_T
 
 
 if TYPE_CHECKING:
@@ -41,11 +42,10 @@ class Portals(commands.Cog):
     def __init__(self, bot: core.Bot) -> None:
         self.bot: core.Bot = bot
 
-        self._wait: int = 15  # Only call every 15 mins...
-        self._last_update: datetime.datetime | None = None
-        self._last_payload: dict[str, PortalPayload] = {}
+        self._initial_fetch: bool = True
+        self._last_payload: dict[SERVER_T, PortalPayload] = {}
 
-        self._server: str = "server=Tal Kasha"
+        self._server_iter: core.ServerIter = core.ServerIter()
         self._portals: list[str] = ["Xélorium", "Ecaflipus", "Enutrosor", "Srambad"]
 
         self.unit_mapping: UnitMapping = {"d": "days", "h": "hours", "m": "minutes", "s": "seconds"}
@@ -98,9 +98,14 @@ class Portals(commands.Cog):
         }
 
     async def cog_load(self) -> None:
+        if self._initial_fetch:
+            for _ in range(len(self._server_iter)):
+                await asyncio.to_thread(self._fetch_portals, next(self._server_iter))
+                await asyncio.sleep(5)
+
         self.dip_updater.start()
 
-    def _parse_data(self, portal: str, /, *, data: str) -> None:
+    def _parse_data(self, server: SERVER_T, *, portal: str, data: str) -> None:
         match: re.Match[str] | None = PORTAL_RE.search("".join(data.splitlines()))
         if not match:
             return
@@ -109,7 +114,7 @@ class Portals(commands.Cog):
         updated: int = int(match.group("updated"))
         unit: Units = self.unit_mapping.get(match.group("unit"), "unknown")
 
-        self._last_payload[portal] = {"pos": pos, "updated": updated, "unit": unit}
+        self._last_payload[server] = {"name": portal, "pos": pos, "updated": updated, "unit": unit}
 
     def _convert_time(self, *, unit: str, updated: int) -> str:
         if unit == "unknown":
@@ -128,14 +133,9 @@ class Portals(commands.Cog):
 
         return f"<t:{int(delta.timestamp())}:R>"
 
-    def _fetch_portals(self) -> None:
-        if self._last_update and (self._last_update + datetime.timedelta(minutes=self._wait)) > datetime.datetime.now():
-            return
-
-        self._last_update = datetime.datetime.now()
-
+    def _fetch_portals(self, server: SERVER_T) -> None:
         for portal in self._portals:
-            data: bytes = f"portal={portal}&{self._server}".encode()
+            data: bytes = f"portal={portal}&{server}".encode()
 
             resp = requests.post(URL, cookies=self.cookies, headers=self.headers, data=data)
             if resp.status_code != 200:
@@ -143,40 +143,43 @@ class Portals(commands.Cog):
                 return
 
             html: str = resp.text
-            self._parse_data(self._english_names.get(portal, portal), data=html)
+            self._parse_data(server, portal=self._english_names.get(portal, portal), data=html)
 
-    def generate_embed(self) -> discord.Embed:
-        embed: discord.Embed = discord.Embed(title="Tal Kasha - Portals", color=0xF7B5C2)
+    def generate_embed(self, server: SERVER_T) -> discord.Embed:
+        embed: discord.Embed = discord.Embed(title=f"{server} - Portals", color=0xF7B5C2)
         embed.set_thumbnail(url=self.bot.user.avatar.url)  # type: ignore
 
         if not self._last_payload:
             embed.description = "No portal data available!"
             return embed
 
-        for key, value in self._last_payload.items():
-            position: str = str(value.get("pos", "Unknown"))
-            unit: str = value.get("unit", "unknown")
-            updated: int = value.get("updated", 0)
+        data: PortalPayload = self._last_payload[server]
+        position: str = str(data.get("pos", "Unknown"))
+        unit: str = data.get("unit", "unknown")
+        updated: int = data.get("updated", 0)
+        name: str = data.get("name", "Unknown")
 
-            stamp: str = self._convert_time(unit=unit, updated=updated)
-            embed.add_field(name=f"{key} Dimension", value=f"`{position}`\nUpdated: {stamp}", inline=False)
+        stamp: str = self._convert_time(unit=unit, updated=updated)
+        embed.add_field(name=f"{name} Dimension", value=f"`{position}`\nUpdated: {stamp}", inline=False)
 
         return embed
 
     @commands.hybrid_command()
-    async def portals(self, ctx: commands.Context[core.Bot]) -> None:
-        """Fetch the last known positions of the dimension portals."""
-        await ctx.defer(ephemeral=True)
-        await asyncio.to_thread(self._fetch_portals)
+    async def portals(self, ctx: commands.Context[core.Bot], *, server: SERVER_T) -> None:
+        """Fetch the last known positions of the dimension portals.
 
-        embed: discord.Embed = self.generate_embed()
+        Parameters
+        ----------
+        server: str
+            The server to get Portal Positions for.
+        """
+        await ctx.defer(ephemeral=True)
+
+        embed: discord.Embed = self.generate_embed(server)
         await ctx.send(embed=embed, ephemeral=True)
 
-    @tasks.loop(minutes=30)
-    async def dip_updater(self) -> None:
-        await asyncio.to_thread(self._fetch_portals)
-
-        embed: discord.Embed = self.generate_embed()
+    async def _update_dip(self, server: SERVER_T) -> None:
+        embed: discord.Embed = self.generate_embed(server)
         channel: discord.TextChannel | None = self.bot.get_channel(1250936053603242167)  # type: ignore
 
         if not channel:
@@ -186,15 +189,29 @@ class Portals(commands.Cog):
         history: list[discord.Message] = [m async for m in channel.history()]
 
         try:
-            previous: discord.Message = history[0]
+            previous: discord.Message = history[self._server_iter.index]
         except IndexError:
             await channel.send(embed=embed)
         else:
             await previous.edit(embed=embed)
 
+    @tasks.loop(minutes=10)
+    async def dip_updater(self) -> None:
+        if self._initial_fetch:
+            self._initial_fetch = False
+            return
+
+        server: SERVER_T = next(self._server_iter)
+        await asyncio.to_thread(self._fetch_portals, server)
+
+        await self._update_dip(server)
+
     @dip_updater.before_loop
     async def dip_updater_before(self) -> None:
         await self.bot.wait_until_ready()
+
+        for _ in range(len(self._server_iter)):
+            await self._update_dip(next(self._server_iter))
 
 
 async def setup(bot: core.Bot) -> None:

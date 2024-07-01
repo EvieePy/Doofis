@@ -17,6 +17,7 @@ from typing import Literal, TypedDict
 
 
 type Units = Literal["days", "hours", "minutes", "seconds", "unknown"]
+type SERVER_T = Literal["Tal Kasha", "Draconiros", "Hell Mina"]
 
 
 class UnitMapping(TypedDict):
@@ -27,6 +28,7 @@ class UnitMapping(TypedDict):
 
 
 class PortalPayload(TypedDict, total=False):
+    name: str
     pos: list[int]
     updated: int
     unit: Units
