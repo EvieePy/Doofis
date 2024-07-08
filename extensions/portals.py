@@ -55,6 +55,13 @@ class Portals(commands.Cog):
             "Srambad": "Srambad",
         }
 
+        self.emojis: dict[str, str] = {
+            "Xelorium": "<:Xelorium:1259811660223352864>",
+            "Ecaflipus": "<:Ecaflipus:1259811654133092382>",
+            "Srambad": "<:Srambad:1259811657077624893>",
+            "Enurado": "<:Enutrosor:1259811658302488678>",
+        }
+
     @property
     def cookies(self) -> dict[str, str]:
         return {
@@ -156,7 +163,7 @@ class Portals(commands.Cog):
             name: str = key
 
             stamp: str = self._convert_time(unit=unit, updated=updated)
-            embed.add_field(name=f"{name} Dimension", value=f"`{position}`\nUpdated: {stamp}", inline=False)
+            embed.add_field(name=f"{name} Dimension", value=f"`{position}`\n{self.emojis[name]} {stamp}", inline=False)
 
         return embed
 
