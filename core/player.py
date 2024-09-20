@@ -16,7 +16,7 @@ limitations under the License.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import discord
 import wavelink
@@ -43,13 +43,80 @@ class ConfirmView(discord.ui.View):
         self.stop()
 
 
+class AutoPlaySelect(discord.ui.Select[discord.ui.View]):
+    def __init__(self, *, player_view: PlayerView, default: bool = False, **kwargs: Any) -> None:
+        self.player_view: PlayerView = player_view
+        placeholder = "Enable/Disable AutoPlay"
+
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=0, **kwargs)
+
+        self.add_option(
+            label="Enable AutoPlay",
+            value="0",
+            description="Enable the AutoPlay feature.",
+            default=bool(default),
+        )
+        self.add_option(
+            label="Disable AutoPlay",
+            value="1",
+            description="Disable the AutoPlay feature.",
+            default=not default,
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        player: Player = self.player_view.player
+        member = cast(discord.Member, interaction.user)
+
+        if member == player.dj:
+            return True
+
+        if player.home.permissions_for(member).manage_messages:
+            return True
+
+        if member not in player.channel.members:
+            return False
+
+        if len(player.channel.members) <= 2:
+            return True
+
+        return False
+
+    async def callback(self, interaction: discord.Interaction) -> Any:
+        try:
+            value = self.values.pop(0)
+        except IndexError:
+            await interaction.response.defer()
+            self.player_view.player.autoplay = wavelink.AutoPlayMode(0)
+            return
+
+        mode: wavelink.AutoPlayMode = wavelink.AutoPlayMode(int(value))
+        default: bool = False
+
+        self.player_view.player.autoplay = mode
+
+        if mode is wavelink.AutoPlayMode.partial:
+            default = True
+            self.player_view.player.auto_queue.clear()
+
+        await interaction.response.send_message(
+            f"{interaction.user.mention} changed the AutoPlay mode to: `{mode}`", delete_after=10
+        )
+
+        self.player_view.remove_item(self)
+        self.player_view.add_item(AutoPlaySelect(player_view=self.player_view, default=default))
+
+        await self.player_view.player.send_view()
+
+
 class PlayerView(discord.ui.View):
     def __init__(self, *, timeout: float | None = None, player: Player) -> None:
         self.player: Player = player
         self.stopping: bool = False
-        super().__init__(timeout=timeout)
 
-    @discord.ui.button(emoji=PlayerEmoji.VOL_DOWN.value)
+        super().__init__(timeout=timeout)
+        self.add_item(AutoPlaySelect(player_view=self))
+
+    @discord.ui.button(emoji=PlayerEmoji.VOL_DOWN.value, row=1)
     async def vol_down(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -61,7 +128,7 @@ class PlayerView(discord.ui.View):
         await self.player.set_volume(vol)
         self.player.next_payload = None
 
-    @discord.ui.button(emoji=PlayerEmoji.SHUFFLE.value)
+    @discord.ui.button(emoji=PlayerEmoji.SHUFFLE.value, row=1)
     async def shuffle(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -72,7 +139,7 @@ class PlayerView(discord.ui.View):
         self.player.auto_queue.shuffle()
         self.player.next_payload = None
 
-    @discord.ui.button(emoji=PlayerEmoji.PAUSE.value)
+    @discord.ui.button(emoji=PlayerEmoji.PAUSE.value, row=1)
     async def play_pause(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -88,7 +155,7 @@ class PlayerView(discord.ui.View):
 
         self.player.next_payload = None
 
-    @discord.ui.button(disabled=True, emoji=PlayerEmoji.REPLAY.value)
+    @discord.ui.button(disabled=True, emoji=PlayerEmoji.REPLAY.value, row=1)
     async def replay(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -106,7 +173,7 @@ class PlayerView(discord.ui.View):
 
         self.player.next_payload = None
 
-    @discord.ui.button(emoji=PlayerEmoji.VOL_UP.value)
+    @discord.ui.button(emoji=PlayerEmoji.VOL_UP.value, row=1)
     async def vol_up(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -118,11 +185,11 @@ class PlayerView(discord.ui.View):
         await self.player.set_volume(vol)
         self.player.next_payload = None
 
-    @discord.ui.button(disabled=True, label="\u200b")
+    @discord.ui.button(disabled=True, label="\u200b", row=2)
     async def empty_one(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
-    @discord.ui.button(disabled=True, emoji=PlayerEmoji.BACKWARD.value)
+    @discord.ui.button(disabled=True, emoji=PlayerEmoji.BACKWARD.value, row=2)
     async def empty_two(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         assert self.player.guild
         await interaction.response.defer()
@@ -150,7 +217,7 @@ class PlayerView(discord.ui.View):
         else:
             await self.player.play(old)
 
-    @discord.ui.button(emoji=PlayerEmoji.STOP.value)
+    @discord.ui.button(emoji=PlayerEmoji.STOP.value, row=2)
     async def stop_button(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer(ephemeral=True)
         if self.stopping:
@@ -174,7 +241,7 @@ class PlayerView(discord.ui.View):
 
         await self.player.disconnect()
 
-    @discord.ui.button(emoji=PlayerEmoji.FORWARD.value)
+    @discord.ui.button(emoji=PlayerEmoji.FORWARD.value, row=2)
     async def empty_three(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         assert self.player.guild
         await interaction.response.defer()
@@ -191,7 +258,7 @@ class PlayerView(discord.ui.View):
 
         await self.player.skip(force=True)
 
-    @discord.ui.button(disabled=True, label="\u200b")
+    @discord.ui.button(disabled=True, label="\u200b", row=2)
     async def empty_four(self, interaction: discord.Interaction[Bot], button: discord.ui.Button[Self]) -> None:
         await interaction.response.defer()
 
@@ -206,6 +273,7 @@ class Player(wavelink.Player):
         self.updater_task: asyncio.Task[None] = asyncio.create_task(self.updater())
         self.next_payload: wavelink.Playable | None | Literal[False] = False
 
+        self.dispatching: bool = False
         super().__init__(*args, **kwargs)
 
     def can_command(self, member: discord.Member) -> bool:
@@ -275,6 +343,10 @@ class Player(wavelink.Player):
         return embed
 
     async def send_view(self, track: wavelink.Playable | None | Literal[False] = None) -> None:
+        if self.dispatching:
+            return
+
+        self.dispatching = True
         self.next_payload = False
 
         assert self.guild is not None
@@ -282,11 +354,13 @@ class Player(wavelink.Player):
 
         if not self.message or not self.home.permissions_for(self.guild.me).read_message_history:
             self.message = await self.home.send(view=self.view, embed=embed)
+            self.dispatching = False
             return
 
         async for msg in self.home.history(limit=5):
             if msg.id == self.message.id:
                 await msg.edit(view=self.view, embed=embed)
+                self.dispatching = False
                 return
 
         try:
@@ -295,6 +369,7 @@ class Player(wavelink.Player):
             pass
 
         self.message = await self.home.send(view=self.view, embed=embed)
+        self.dispatching = False
 
     async def disconnect(self, **kwargs: Any) -> None:
         if not self.message:
