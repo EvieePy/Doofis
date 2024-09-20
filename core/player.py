@@ -51,13 +51,13 @@ class AutoPlaySelect(discord.ui.Select[discord.ui.View]):
         super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=0, **kwargs)
 
         self.add_option(
-            label="Enable AutoPlay",
+            label="AutoPlay Enabled",
             value="0",
             description="Enable the AutoPlay feature.",
             default=bool(default),
         )
         self.add_option(
-            label="Disable AutoPlay",
+            label="AutoPlay Disabled",
             value="1",
             description="Disable the AutoPlay feature.",
             default=not default,
