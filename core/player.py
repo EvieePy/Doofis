@@ -44,7 +44,7 @@ class ConfirmView(discord.ui.View):
 
 
 class AutoPlaySelect(discord.ui.Select[discord.ui.View]):
-    def __init__(self, *, player_view: PlayerView, default: bool = False, **kwargs: Any) -> None:
+    def __init__(self, *, player_view: PlayerView, default: bool = True, **kwargs: Any) -> None:
         self.player_view: PlayerView = player_view
         placeholder = "Enable/Disable AutoPlay"
 
@@ -90,12 +90,12 @@ class AutoPlaySelect(discord.ui.Select[discord.ui.View]):
             return
 
         mode: wavelink.AutoPlayMode = wavelink.AutoPlayMode(int(value))
-        default: bool = False
+        default: bool = True
 
         self.player_view.player.autoplay = mode
 
         if mode is wavelink.AutoPlayMode.partial:
-            default = True
+            default = False
             self.player_view.player.auto_queue.clear()
 
         await interaction.response.send_message(
